@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>工作坊簽到分析儀表板</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
   <style>
     :root {
       --primary: #6366f1;
@@ -21,17 +20,29 @@
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
-    
-    /* Header */
+
+    /* Loading screen */
+    #loading-screen {
+      position: fixed; inset: 0; background: var(--bg);
+      display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 9999;
+    }
+    #loading-screen .spinner { width: 48px; height: 48px; border: 4px solid var(--border); border-top-color: var(--primary); border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 16px; }
+    #loading-screen p { color: var(--text-dim); font-size: 15px; }
+    #loading-screen .error-msg { color: var(--danger); font-size: 14px; margin-top: 12px; text-align: center; max-width: 400px; display: none; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
     header { background: var(--card); border-bottom: 1px solid var(--border); padding: 16px 24px; position: sticky; top: 0; z-index: 100; }
     .header-inner { max-width: 1400px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
-    .header-inner h1 { font-size: 20px; font-weight: 700; color: var(--primary); display: flex; align-items: center; gap: 8px; }
+    .header-inner h1 { font-size: 20px; font-weight: 700; color: var(--primary); }
     .header-controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-    
-    /* Main layout */
-    main { max-width: 1400px; margin: 0 auto; padding: 24px; }
-    
-    /* Stats cards */
+    .btn { background: var(--primary); color: white; border: none; padding: 8px 16px; border-radius: 8px; font-size: 13px; cursor: pointer; font-weight: 600; transition: background 0.2s; }
+    .btn:hover { background: var(--primary-dark); }
+    .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text); }
+    .btn-outline:hover { border-color: var(--primary); color: var(--primary); }
+
+    main { max-width: 1400px; margin: 0 auto; padding: 24px; display: none; }
+    main.visible { display: block; }
+
     .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 24px; }
     .stat-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
     .stat-card .label { font-size: 13px; color: var(--text-dim); margin-bottom: 6px; }
@@ -39,65 +50,37 @@
     .stat-card .sub { font-size: 12px; color: var(--text-dim); margin-top: 4px; }
     .stat-card.warning .value { color: var(--warning); }
     .stat-card.success .value { color: var(--success); }
-    
-    /* Filters */
+
     .filters { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px 20px; margin-bottom: 24px; display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
     .filters label { font-size: 13px; color: var(--text-dim); display: flex; align-items: center; gap: 6px; }
     .filters select, .filters input { background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 6px 12px; border-radius: 8px; font-size: 13px; min-width: 140px; }
     .filters select:focus, .filters input:focus { outline: 2px solid var(--primary); border-color: var(--primary); }
-    .btn { background: var(--primary); color: white; border: none; padding: 8px 16px; border-radius: 8px; font-size: 13px; cursor: pointer; font-weight: 600; transition: background 0.2s; }
-    .btn:hover { background: var(--primary-dark); }
-    .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text); }
-    .btn-outline:hover { border-color: var(--primary); color: var(--primary); }
-    
-    /* Charts */
+
     .charts-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 20px; margin-bottom: 24px; }
     .chart-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
-    .chart-card h3 { font-size: 15px; font-weight: 600; margin-bottom: 16px; color: var(--text); display: flex; align-items: center; gap: 6px; }
+    .chart-card h3 { font-size: 15px; font-weight: 600; margin-bottom: 16px; display: flex; align-items: center; gap: 6px; }
     .chart-wrap { position: relative; height: 260px; }
     .chart-wrap.tall { height: 320px; }
-    
-    /* Tables */
+
     .tables-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 20px; }
+    .table-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-top: 24px; }
+    .table-card h3 { font-size: 15px; font-weight: 600; margin-bottom: 16px; }
     table { width: 100%; border-collapse: collapse; font-size: 13px; }
-    th { text-align: left; padding: 10px 12px; background: var(--bg); color: var(--text-dim); font-weight: 600; border-bottom: 1px solid var(--border); }
+    th { text-align: left; padding: 10px 12px; background: var(--bg); color: var(--text-dim); font-weight: 600; border-bottom: 1px solid var(--border); white-space: nowrap; }
     td { padding: 10px 12px; border-bottom: 1px solid var(--border); }
     tr:hover { background: rgba(99,102,241,0.08); }
+    .table-scroll { max-height: 400px; overflow-y: auto; }
     .badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 600; }
     .badge-primary { background: rgba(99,102,241,0.2); color: #818cf8; }
     .badge-success { background: rgba(34,197,94,0.2); color: #4ade80; }
     .badge-warning { background: rgba(245,158,11,0.2); color: #fbbf24; }
     .badge-danger { background: rgba(239,68,68,0.2); color: #f87171; }
-    
-    /* Detail panel */
-    .detail-panel { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-top: 24px; }
-    .detail-panel h3 { font-size: 15px; font-weight: 600; margin-bottom: 16px; }
-    .detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
-    .detail-item label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; }
-    .detail-item p { font-size: 15px; font-weight: 600; margin-top: 4px; }
-    
-    /* Loading */
-    .loading { display: flex; align-items: center; justify-content: center; height: 200px; color: var(--text-dim); gap: 10px; }
-    .spinner { width: 24px; height: 24px; border: 3px solid var(--border); border-top-color: var(--primary); border-radius: 50%; animation: spin 1s linear infinite; }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    
-    /* Toast */
+
     .toast { position: fixed; bottom: 24px; right: 24px; background: var(--card); border: 1px solid var(--border); padding: 12px 20px; border-radius: 10px; font-size: 14px; z-index: 1000; transform: translateY(100px); opacity: 0; transition: all 0.3s; box-shadow: 0 10px 40px rgba(0,0,0,0.3); }
     .toast.show { transform: translateY(0); opacity: 1; }
     .toast.success { border-color: var(--success); color: var(--success); }
     .toast.error { border-color: var(--danger); color: var(--danger); }
-    
-    /* Empty state */
-    .empty { text-align: center; padding: 40px; color: var(--text-dim); }
-    
-    /* Rank color coding */
-    .rank-ufo { color: #fbbf24; }
-    .rank-ec { color: #a78bfa; }
-    .rank-c { color: #34d399; }
-    .rank-mc { color: #60a5fa; }
-    .rank-sec { color: #f472b6; }
-    
-    /* Responsive */
+
     @media (max-width: 768px) {
       .charts-grid, .tables-grid { grid-template-columns: 1fr; }
       .stat-card .value { font-size: 24px; }
@@ -106,18 +89,24 @@
 </head>
 <body>
 
+<!-- Loading screen -->
+<div id="loading-screen">
+  <div class="spinner"></div>
+  <p>正在讀取 Google Sheets 資料...</p>
+  <div class="error-msg" id="loadingError"></div>
+</div>
+
 <header>
   <div class="header-inner">
     <h1>📊 工作坊簽到分析儀表板</h1>
     <div class="header-controls">
-      <span style="font-size:13px;color:var(--text-dim)">🔑 API Key:</span>
-      <button class="btn" onclick="loadData()" id="loadBtn">🔄 讀取資料</button>
+      <button class="btn" onclick="location.reload()">🔄 重新整理</button>
       <button class="btn btn-outline" onclick="exportCSV()">📥 匯出 CSV</button>
     </div>
   </div>
 </header>
 
-<main>
+<main id="mainContent">
   <!-- Stats -->
   <div class="stats-grid" id="statsGrid">
     <div class="stat-card">
@@ -180,7 +169,7 @@
     <div class="chart-card">
       <h3>🏷️ 工作坊類別分佈</h3>
       <div class="chart-wrap"><canvas id="chartType"></canvas></div>
-      <div style="margin-top:12px"><canvas id="chartTypeBar"></canvas></div>
+      <div style="margin-top:12px;height:200px"><canvas id="chartTypeBar"></canvas></div>
     </div>
   </div>
 
@@ -209,35 +198,26 @@
   </div>
 
   <!-- Tables -->
-  <div class="tables-grid" style="margin-top:24px;">
-    <div class="chart-card">
+  <div class="tables-grid">
+    <div class="table-card" style="margin-top:0">
       <h3>📅 每日簽到記錄（最近30筆）</h3>
-      <div style="max-height:400px;overflow-y:auto;">
-        <table id="tableRecent">
-          <thead></thead>
-          <tbody></tbody>
-        </table>
+      <div class="table-scroll">
+        <table id="tableRecent"><thead></thead><tbody></tbody></table>
       </div>
     </div>
-    <div class="chart-card">
+    <div class="table-card" style="margin-top:0">
       <h3>🏆 小C團隊排名</h3>
-      <div style="max-height:400px;overflow-y:auto;">
-        <table id="tableTeams">
-          <thead></thead>
-          <tbody></tbody>
-        </table>
+      <div class="table-scroll">
+        <table id="tableTeams"><thead></thead><tbody></tbody></table>
       </div>
     </div>
   </div>
 
   <!-- Top participants -->
-  <div class="detail-panel" style="margin-top:24px;">
+  <div class="table-card">
     <h3>⭐ 活躍參與者（前20名）</h3>
-    <div style="max-height:400px;overflow-y:auto;">
-      <table id="tableTop">
-        <thead></thead>
-        <tbody></tbody>
-      </table>
+    <div class="table-scroll">
+      <table id="tableTop"><thead></thead><tbody></tbody></table>
     </div>
   </div>
 </main>
@@ -245,69 +225,122 @@
 <div class="toast" id="toast"></div>
 
 <script>
+// ========== Config ==========
+const API_KEY = 'v2.BYXneOcP6Bv73dvpyiE_tUZQtFxobX4KB3ruQWCMxOfveEkzVnmOwUk5ugf9H2K_QjOQRG4jxEJkONVa6oJ0K38OBygg0LtRx2lw-hF5zIU6WC9Jrz5t3rlx';
+const SHEET_ID = '1QEytkFQTYVgkwCxgcC4BKrvf9ZkC_GApJd1U6JQAnsI';
+
 // ========== State ==========
 let allData = [];
 let filteredData = [];
-let charts = {};
+const chartInstances = {};
 
-// ========== Init ==========
-window.onload = () => {
-  // Small delay to ensure DOM is fully ready
-  setTimeout(() => loadData(), 100);
-};
-
+// ========== Toast ==========
 function toast(msg, type='success') {
   const t = document.getElementById('toast');
   t.textContent = msg;
   t.className = `toast ${type} show`;
-  setTimeout(() => t.classList.remove('show'), 3000);
+  setTimeout(() => t.classList.remove('show'), 4000);
 }
 
-function showLoading(el) {
-  el.innerHTML = '<div class="loading"><div class="spinner"></div>載入中...</div>';
+function showError(msg) {
+  document.getElementById('loadingError').textContent = msg;
+  document.getElementById('loadingError').style.display = 'block';
 }
 
-// ========== API Call ==========
-async function fetchSheet(sheetName, apiKey, sheetId) {
-  // Use A1:Z without sheet name prefix - Maton gateway handles it
-  const url = `https://gateway.maton.ai/google-sheets/v4/spreadsheets/${sheetId}/values/A1:Z`;
-  const resp = await fetch(url, {
-    headers: { 'Authorization': `Bearer ${apiKey}` }
-  });
-  if (!resp.ok) throw new Error(`API error: ${resp.status}`);
-  return resp.json();
-}
-
-// ========== Data Load ==========
-async function loadData() {
-  const apiKey = AUTO_API_KEY;
-  const sheetId = AUTO_SHEET_ID;
-  
+// ========== Init ==========
+async function init() {
   try {
-    showLoading(document.querySelector('main'));
-    
-    const raw = await fetchSheet('簽到記錄表', apiKey, sheetId);
+    document.querySelector('#loading-screen p').textContent = '正在讀取 Google Sheets 資料...';
+    const raw = await fetchSheet();
     const rows = raw.values;
-    if (!rows || rows.length < 2) { toast('查無資料', 'error'); return; }
-    
-    const headers = rows[0].map(h => h.trim());
+    if (!rows || rows.length < 2) {
+      showError('查無資料');
+      return;
+    }
+    const headers = rows[0].map(h => String(h || '').trim());
     allData = rows.slice(1).map(row => {
       const obj = {};
-      headers.forEach((h, i) => obj[h] = (row[i] || '').trim());
+      headers.forEach((h, i) => obj[h] = String(row[i] || '').trim());
       return obj;
     }).filter(r => r['時間戳記']);
-    
+
     filteredData = [...allData];
-    
+
+    // Hide loading, show main
+    document.getElementById('loading-screen').style.display = 'none';
+    document.getElementById('mainContent').classList.add('visible');
+
     toast(`已載入 ${allData.length} 筆記錄！`);
     buildUI();
   } catch (e) {
-    toast('載入失敗：' + e.message, 'error');
-    console.error(e);
+    console.error('Load error:', e);
+    showError('載入失敗：' + e.message + '\n\n請確認網路連線，或聯繫管理者。');
   }
 }
 
-// ========== Filter ==========
+// ========== API ==========
+async function fetchSheet() {
+  const url = `https://gateway.maton.ai/google-sheets/v4/spreadsheets/${SHEET_ID}/values/A1:Z`;
+  const resp = await fetch(url, {
+    headers: { 'Authorization': `Bearer ${API_KEY}` }
+  });
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
+  const data = await resp.json();
+  if (data.error) throw new Error(data.error.message || 'API 錯誤');
+  return data;
+}
+
+// ========== UI Build ==========
+function buildUI() {
+  try {
+    buildFilters();
+    buildCharts();
+    buildTables();
+    updateStats();
+  } catch (e) {
+    console.error('UI build error:', e);
+    toast('部分圖表載入失敗：' + e.message, 'error');
+  }
+}
+
+function buildFilters() {
+  const types = [...new Set(allData.map(r => r['請選擇這場工作坊的類別']).filter(Boolean))].sort();
+  const roles = [...new Set(allData.map(r => r['參與者身分']).filter(Boolean))].sort();
+  const areas = [...new Set(allData.map(r => r['來自哪個區域']).filter(Boolean))].sort();
+  const ranks = [...new Set(allData.map(r => r['目前聘階']).filter(Boolean))].sort();
+  const teams = [...new Set(allData.map(r => r['所屬小C']).filter(Boolean))].sort();
+
+  populateSelect('filterType', types);
+  populateSelect('filterRole', roles);
+  populateSelect('filterArea', areas);
+  populateSelect('filterRank', ranks);
+  populateSelect('filterTeam', teams);
+
+  // Set date range
+  const dates = allData.map(r => r['參與工作坊日期']).filter(d => d && d.match(/^\d{4}\/\d{1,2}\/\d{1,2}/)).sort();
+  if (dates.length) {
+    document.getElementById('filterDateFrom').value = dates[0];
+    document.getElementById('filterDateTo').value = dates[dates.length - 1];
+  }
+}
+
+function populateSelect(id, values) {
+  const sel = document.getElementById(id);
+  sel.innerHTML = '<option value="">全部</option>';
+  values.forEach(v => { if (v) sel.innerHTML += `<option value="${v}">${v}</option>`; });
+}
+
+function resetFilters() {
+  document.querySelectorAll('.filters select').forEach(s => s.value = '');
+  document.querySelectorAll('.filters input').forEach(i => i.value = '');
+  filteredData = [...allData];
+  buildFilters();
+  buildCharts();
+  buildTables();
+  updateStats();
+  toast('已清除篩選');
+}
+
 function applyFilters() {
   const type = document.getElementById('filterType').value;
   const role = document.getElementById('filterRole').value;
@@ -316,7 +349,7 @@ function applyFilters() {
   const team = document.getElementById('filterTeam').value;
   const dateFrom = document.getElementById('filterDateFrom').value;
   const dateTo = document.getElementById('filterDateTo').value;
-  
+
   filteredData = allData.filter(r => {
     if (type && r['請選擇這場工作坊的類別'] !== type) return false;
     if (role && r['參與者身分'] !== role) return false;
@@ -328,66 +361,13 @@ function applyFilters() {
     if (dateTo && d > dateTo) return false;
     return true;
   });
-  
-  buildCharts();
-  buildTables();
-  updateStats();
-}
 
-// ========== Build UI ==========
-function buildUI() {
-  if (!filteredData || filteredData.length === 0) return;
-  buildFilters();
-  buildCharts();
-  buildTables();
-  updateStats();
-}
-
-function buildFilters() {
-  const types = [...new Set(allData.map(r => r['請選擇這場工作坊的類別']).filter(Boolean))];
-  const roles = [...new Set(allData.map(r => r['參與者身分']).filter(Boolean))];
-  const areas = [...new Set(allData.map(r => r['來自哪個區域']).filter(Boolean))];
-  const ranks = [...new Set(allData.map(r => r['目前聘階']).filter(Boolean))];
-  const teams = [...new Set(allData.map(r => r['所屬小C']).filter(Boolean))];
-  
-  populateSelect('filterType', types);
-  populateSelect('filterRole', roles);
-  populateSelect('filterArea', areas);
-  populateSelect('filterRank', ranks);
-  populateSelect('filterTeam', teams);
-  
-  // Date range
-  const dates = allData.map(r => r['參與工作坊日期']).filter(Boolean).sort();
-  if (dates.length) {
-    document.getElementById('filterDateFrom').value = dates[0];
-    document.getElementById('filterDateTo').value = dates[dates.length - 1];
-  }
-}
-
-function populateSelect(id, values) {
-  const sel = document.getElementById(id);
-  const first = sel.options[0].value;
-  sel.innerHTML = `<option value="">全部</option>`;
-  values.forEach(v => {
-    if (v) sel.innerHTML += `<option value="${v}">${v}</option>`;
-  });
-}
-
-function resetFilters() {
-  document.querySelectorAll('.filters select').forEach(s => s.value = '');
-  document.querySelectorAll('.filters input').forEach(i => i.value = '');
-  filteredData = [...allData];
-  buildFilters();
   buildCharts();
   buildTables();
   updateStats();
 }
 
 // ========== Stats ==========
-// Auto-load on page open
-const AUTO_API_KEY = 'v2.BYXneOcP6Bv73dvpyiE_tUZQtFxobX4KB3ruQWCMxOfveEkzVnmOwUk5ugf9H2K_QjOQRG4jxEJkONVa6oJ0K38OBygg0LtRx2lw-hF5zIU6WC9Jrz5t3rlx';
-const AUTO_SHEET_ID = '1QEytkFQTYVgkwCxgcC4BKrvf9ZkC_GApJd1U6JQAnsI';
-
 function updateStats() {
   const total = filteredData.length;
   const unique = new Set(filteredData.map(r => r['夥伴姓'] + r['名字'])).size;
@@ -395,14 +375,14 @@ function updateStats() {
   const host = filteredData.filter(r => r['參與者身分'] === '主持人/場控').length;
   const biz = filteredData.filter(r => r['請選擇這場工作坊的類別'] === '經營工作坊').length;
   const teams = new Set(filteredData.map(r => r['所屬小C'])).size;
-  
+
   document.getElementById('statTotal').textContent = total;
   document.getElementById('statUnique').textContent = unique;
   document.getElementById('statLearner').textContent = learner;
   document.getElementById('statHost').textContent = host;
   document.getElementById('statBiz').textContent = biz;
   document.getElementById('statTeams').textContent = teams;
-  
+
   const dates = filteredData.map(r => r['參與工作坊日期']).filter(Boolean).sort();
   if (dates.length) {
     document.getElementById('statDateRange').textContent = `${dates[0]} ~ ${dates[dates.length-1]}`;
@@ -411,34 +391,49 @@ function updateStats() {
 
 // ========== Charts ==========
 const COLORS = ['#6366f1','#22c55e','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#ec4899','#14b8a6','#f97316','#84cc16'];
+const CHART_OPTS = {
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: { legend: { labels: { color: '#94a3b8', font: { size: 12 } } } },
+  scales: {
+    x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#94a3b8' } },
+    y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#94a3b8' } }
+  }
+};
+
+function safeChart(id, config) {
+  const canvas = document.getElementById(id);
+  if (!canvas) return;
+  if (chartInstances[id]) { try { chartInstances[id].destroy(); } catch(e) {} }
+  const ctx = canvas.getContext('2d');
+  chartInstances[id] = new Chart(ctx, config);
+}
 
 function buildCharts() {
-  if (!filteredData || filteredData.length === 0) return;
-  // Destroy old charts safely
-  Object.values(charts).forEach(c => { try { c.destroy(); } catch(e) {} });
-  charts = {};
-  
-  buildTrendChart();
-  buildTypeChart();
-  buildRoleChart();
-  buildRankChart();
-  buildTeamChart();
-  buildAreaChart();
+  if (!filteredData.length) return;
+  try {
+    buildTrendChart();
+    buildTypeChart();
+    buildRoleChart();
+    buildRankChart();
+    buildTeamChart();
+    buildAreaChart();
+  } catch (e) {
+    console.error('Chart build error:', e);
+    toast('圖表載入失敗: ' + e.message, 'error');
+  }
 }
 
 function buildTrendChart() {
-  // Monthly attendance
   const months = {};
   filteredData.forEach(r => {
     const d = r['參與工作坊日期'];
     if (!d) return;
-    const m = d.substring(0, 7); // YYYY/MM
+    const m = d.substring(0, 7);
     months[m] = (months[m] || 0) + 1;
   });
   const sorted = Object.keys(months).sort();
-  
-  const ctx = document.getElementById('chartTrend').getContext('2d');
-  charts.trend = new Chart(ctx, {
+  safeChart('chartTrend', {
     type: 'line',
     data: {
       labels: sorted,
@@ -447,211 +442,107 @@ function buildTrendChart() {
         data: sorted.map(k => months[k]),
         borderColor: '#6366f1',
         backgroundColor: 'rgba(99,102,241,0.1)',
-        fill: true,
-        tension: 0.4,
-        pointRadius: 4,
-        pointHoverRadius: 6,
+        fill: true, tension: 0.4, pointRadius: 4, pointHoverRadius: 6
       }]
     },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
-      scales: {
-        x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#94a3b8' } },
-        y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#94a3b8' } }
-      }
-    }
+    options: { ...CHART_OPTS, plugins: { legend: { display: false } } }
   });
 }
 
 function buildTypeChart() {
-  if (!filteredData || filteredData.length === 0) return;
   const counts = {};
   filteredData.forEach(r => { const v = r['請選擇這場工作坊的類別']; if (v) counts[v] = (counts[v]||0)+1; });
   const labels = Object.keys(counts);
   const data = Object.values(counts);
-  
-  const ctx = document.getElementById('chartType').getContext('2d');
-  charts.type = new Chart(ctx, {
+  safeChart('chartType', {
     type: 'doughnut',
-    data: {
-      labels, datasets: [{ data, backgroundColor: COLORS.slice(0, labels.length) }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: { position: 'right', labels: { color: '#94a3b8', font: { size: 12 } } }
-      }
-    }
+    data: { labels, datasets: [{ data, backgroundColor: COLORS.slice(0, labels.length) }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { color: '#94a3b8' } } } }
   });
-  
-  // Bar chart for type by month
-  const types = [...new Set(allData.map(r => r['請選擇這場工作坊的類別']).filter(Boolean))];
+
+  // Bar by month
+  const types = [...new Set(allData.map(r => r['請選擇這場工作坊的類別']).filter(Boolean))].sort();
   const monthSet = [...new Set(filteredData.map(r => r['參與工作坊日期'].substring(0,7)).filter(Boolean))].sort();
-  
   const typeByMonth = {};
   types.forEach(t => { typeByMonth[t] = {}; monthSet.forEach(m => { typeByMonth[t][m] = 0; }); });
-  filteredData.forEach(r => {
-    const t = r['請選擇這場工作坊的類別'];
-    const m = r['參與工作坊日期'].substring(0,7);
-    if (t && m) typeByMonth[t][m] = (typeByMonth[t][m]||0) + 1;
-  });
-  
-  const ctx2 = document.getElementById('chartTypeBar').getContext('2d');
-  charts.typeBar = new Chart(ctx2, {
+  filteredData.forEach(r => { const t = r['請選擇這場工作坊的類別']; const m = r['參與工作坊日期'].substring(0,7); if (t && m) typeByMonth[t][m]++; });
+  safeChart('chartTypeBar', {
     type: 'bar',
-    data: {
-      labels: monthSet,
-      datasets: types.map((t, i) => ({
-        label: t,
-        data: monthSet.map(m => typeByMonth[t][m] || 0),
-        backgroundColor: COLORS[i % COLORS.length],
-      }))
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
-      scales: {
-        x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#94a3b8' } },
-        y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#94a3b8' } }
-      }
-    }
+    data: { labels: monthSet, datasets: types.map((t, i) => ({ label: t, data: monthSet.map(m => typeByMonth[t][m]||0), backgroundColor: COLORS[i % COLORS.length] })) },
+    options: { ...CHART_OPTS, plugins: { legend: { display: false } } }
   });
 }
 
 function buildRoleChart() {
-  if (!filteredData || filteredData.length === 0) return;
   const counts = {};
   filteredData.forEach(r => { const v = r['參與者身分']; if (v) counts[v] = (counts[v]||0)+1; });
-  const labels = Object.keys(counts);
-  const data = Object.values(counts);
-  
-  const ctx = document.getElementById('chartRole').getContext('2d');
-  charts.role = new Chart(ctx, {
+  safeChart('chartRole', {
     type: 'pie',
-    data: {
-      labels, datasets: [{ data, backgroundColor: ['#22c55e','#6366f1','#f59e0b'] }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: { legend: { position: 'bottom', labels: { color: '#94a3b8' } } }
-    }
+    data: { labels: Object.keys(counts), datasets: [{ data: Object.values(counts), backgroundColor: ['#22c55e','#6366f1','#f59e0b'] }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#94a3b8' } } } }
   });
 }
 
 function buildRankChart() {
-  if (!filteredData || filteredData.length === 0) return;
   const counts = {};
   filteredData.forEach(r => { const v = r['目前聘階']; if (v) counts[v] = (counts[v]||0)+1; });
   const sorted = Object.entries(counts).sort((a,b) => b[1]-a[1]);
-  
-  const ctx = document.getElementById('chartRank').getContext('2d');
-  charts.rank = new Chart(ctx, {
+  safeChart('chartRank', {
     type: 'bar',
-    data: {
-      labels: sorted.map(s => s[0]),
-      datasets: [{ label: '人數', data: sorted.map(s => s[1]), backgroundColor: '#8b5cf6' }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      indexAxis: 'y',
-      plugins: { legend: { display: false } },
-      scales: {
-        x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#94a3b8' } },
-        y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#94a3b8' } }
-      }
-    }
+    data: { labels: sorted.map(s => s[0]), datasets: [{ label: '人數', data: sorted.map(s => s[1]), backgroundColor: '#8b5cf6' }] },
+    options: { ...CHART_OPTS, indexAxis: 'y', plugins: { legend: { display: false } } }
   });
 }
 
 function buildTeamChart() {
-  if (!filteredData || filteredData.length === 0) return;
   const counts = {};
   filteredData.forEach(r => { const v = r['所屬小C']; if (v) counts[v] = (counts[v]||0)+1; });
   const sorted = Object.entries(counts).sort((a,b) => b[1]-a[1]).slice(0, 10);
-  
-  const ctx = document.getElementById('chartTeam').getContext('2d');
-  charts.team = new Chart(ctx, {
+  safeChart('chartTeam', {
     type: 'bar',
-    data: {
-      labels: sorted.map(s => s[0]),
-      datasets: [{ label: '簽到次數', data: sorted.map(s => s[1]), backgroundColor: '#06b6d4' }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      indexAxis: 'y',
-      plugins: { legend: { display: false } },
-      scales: {
-        x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#94a3b8' } },
-        y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#94a3b8' } }
-      }
-    }
+    data: { labels: sorted.map(s => s[0]), datasets: [{ label: '簽到次數', data: sorted.map(s => s[1]), backgroundColor: '#06b6d4' }] },
+    options: { ...CHART_OPTS, indexAxis: 'y', plugins: { legend: { display: false } } }
   });
 }
 
 function buildAreaChart() {
-  if (!filteredData || filteredData.length === 0) return;
   const counts = {};
   filteredData.forEach(r => { const v = r['來自哪個區域']; if (v) counts[v] = (counts[v]||0)+1; });
   const sorted = Object.entries(counts).sort((a,b) => b[1]-a[1]);
-  
-  const ctx = document.getElementById('chartArea').getContext('2d');
-  charts.area = new Chart(ctx, {
+  safeChart('chartArea', {
     type: 'bar',
-    data: {
-      labels: sorted.map(s => s[0]),
-      datasets: [{ label: '人數', data: sorted.map(s => s[1]), backgroundColor: '#f59e0b' }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
-      scales: {
-        x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#94a3b8' } },
-        y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#94a3b8' } }
-      }
-    }
+    data: { labels: sorted.map(s => s[0]), datasets: [{ label: '人數', data: sorted.map(s => s[1]), backgroundColor: '#f59e0b' }] },
+    options: { ...CHART_OPTS, plugins: { legend: { display: false } } }
   });
 }
 
 // ========== Tables ==========
 function buildTables() {
-  buildRecentTable();
-  buildTeamTable();
-  buildTopParticipants();
+  try {
+    buildRecentTable();
+    buildTeamTable();
+    buildTopParticipants();
+  } catch (e) {
+    console.error('Table build error:', e);
+  }
 }
 
 function buildRecentTable() {
-  const headers = ['時間戳記','工作坊日期','姓名','區域','聘階','工作坊類別','身份','所屬小C'];
-  const fieldMap = ['時間戳記','參與工作坊日期',null,null,null,'請選擇這場工作坊的類別','參與者身分','所屬小C'];
-  
+  const headers = ['時間戳記','工作坊日期','姓名','區域','聘階','類別','身份','所屬小C'];
   const thead = document.querySelector('#tableRecent thead');
   const tbody = document.querySelector('#tableRecent tbody');
   thead.innerHTML = `<tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr>`;
-  
   const recent = filteredData.slice(-30).reverse();
   tbody.innerHTML = recent.map(r => {
-    const name = `${r['夥伴姓'] || ''}${r['名字'] || ''}`;
-    const area = r['來自哪個區域'] || '';
-    const rank = r['目前聘階'] || '';
-    const type = r['請選擇這場工作坊的類別'] || '';
-    const role = r['參與者身分'] || '';
-    const team = r['所屬小C'] || '';
+    const name = `${r['夥伴姓']||''}${r['名字']||''}`;
+    const type = r['請選擇這場工作坊的類別']||'';
+    const role = r['參與者身分']||'';
     return `<tr>
-      <td>${r['時間戳記'] || ''}</td>
-      <td>${r['參與工作坊日期'] || ''}</td>
-      <td>${name}</td>
-      <td>${area}</td>
-      <td>${rank}</td>
+      <td>${r['時間戳記']||''}</td><td>${r['參與工作坊日期']||''}</td><td>${name}</td>
+      <td>${r['來自哪個區域']||''}</td><td>${r['目前聘階']||''}</td>
       <td><span class="badge badge-primary">${type}</span></td>
       <td><span class="badge ${role==='學習夥伴'?'badge-success':'badge-warning'}">${role}</span></td>
-      <td>${team}</td>
+      <td>${r['所屬小C']||''}</td>
     </tr>`;
   }).join('');
 }
@@ -660,28 +551,22 @@ function buildTeamTable() {
   const counts = {};
   const learnerCounts = {};
   filteredData.forEach(r => {
-    const t = r['所屬小C'];
-    if (!t) return;
+    const t = r['所屬小C']; if (!t) return;
     counts[t] = (counts[t]||0) + 1;
-    if (r['參與者身分'] === '學習夥伴') {
-      learnerCounts[t] = (learnerCounts[t]||0) + 1;
-    }
+    if (r['參與者身分'] === '學習夥伴') learnerCounts[t] = (learnerCounts[t]||0) + 1;
   });
   const sorted = Object.entries(counts).sort((a,b) => b[1]-a[1]);
-  
   const thead = document.querySelector('#tableTeams thead');
   const tbody = document.querySelector('#tableTeams tbody');
-  thead.innerHTML = `<tr><th>排名</th><th>小C名稱</th><th>總簽到</th><th>學習夥伴</th><th>主持人</th></tr>`;
-  
+  thead.innerHTML = `<tr><th>#</th><th>小C名稱</th><th>總簽到</th><th>學習夥伴</th><th>主持人</th></tr>`;
   tbody.innerHTML = sorted.map(([team, total], i) => {
-    const learner = learnerCounts[team] || 0;
-    const host = total - learner;
+    const learner = learnerCounts[team]||0;
     return `<tr>
       <td><span class="badge ${i<3?'badge-warning':'badge-primary'}">#${i+1}</span></td>
       <td style="font-weight:600">${team}</td>
       <td style="font-weight:700;color:var(--primary)">${total}</td>
       <td style="color:var(--success)">${learner}</td>
-      <td style="color:var(--warning)">${host}</td>
+      <td style="color:var(--warning)">${total-learner}</td>
     </tr>`;
   }).join('');
 }
@@ -689,32 +574,27 @@ function buildTeamTable() {
 function buildTopParticipants() {
   const counts = {};
   filteredData.forEach(r => {
-    const name = `${r['夥伴姓'] || ''}${r['名字'] || ''}`;
+    const name = `${r['夥伴姓']||''}${r['名字']||''}`;
     if (!name) return;
-    if (!counts[name]) {
-      counts[name] = { name, total: 0, team: r['所屬小C'], rank: r['目前聘階'], type: {} };
-    }
+    if (!counts[name]) counts[name] = { name, total:0, team: r['所屬小C'], rank: r['目前聘階'], type:{} };
     counts[name].total++;
     const t = r['請選擇這場工作坊的類別'];
     counts[name].type[t] = (counts[name].type[t]||0) + 1;
   });
   const sorted = Object.entries(counts).sort((a,b) => b[1].total-a[1].total).slice(0, 20);
-  
   const thead = document.querySelector('#tableTop thead');
   const tbody = document.querySelector('#tableTop tbody');
   thead.innerHTML = `<tr><th>#</th><th>姓名</th><th>總出席</th><th>主要身份</th><th>小C</th><th>經營/招募/領導</th></tr>`;
-  
   tbody.innerHTML = sorted.map(([name, info], i) => {
-    const types = info.type;
-    const biz = types['經營工作坊']||0;
-    const rec = types['招募工作坊']||0;
-    const lead = types['領導工作坊']||0;
+    const biz = info.type['經營工作坊']||0;
+    const rec = info.type['招募工作坊']||0;
+    const lead = info.type['領導工作坊']||0;
     return `<tr>
       <td><span class="badge ${i<3?'badge-warning':'badge-primary'}">${i+1}</span></td>
       <td style="font-weight:600">${name}</td>
       <td style="font-weight:700;color:var(--primary)">${info.total}</td>
-      <td><span class="badge badge-success">${info.rank || '-'}</span></td>
-      <td>${info.team || '-'}</td>
+      <td><span class="badge badge-success">${info.rank||'-'}</span></td>
+      <td>${info.team||'-'}</td>
       <td style="font-size:12px">經營:${biz} 招募:${rec} 領導:${lead}</td>
     </tr>`;
   }).join('');
@@ -723,25 +603,23 @@ function buildTopParticipants() {
 // ========== CSV Export ==========
 function exportCSV() {
   if (!filteredData.length) { toast('無資料可匯出', 'error'); return; }
-  
   const headers = ['時間戳記','參與工作坊日期','夥伴姓','名字','來自哪個區域','目前聘階','請選擇這場工作坊的類別','參與者身分','所屬小C'];
   const rows = filteredData.map(r => headers.map(h => `"${(r[h]||'').replace(/"/g,'""')}"`).join(','));
   const csv = [headers.join(','), ...rows].join('\n');
-  
   const blob = new Blob(['\ufeff'+csv], { type: 'text/csv;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = url;
+  a.href = URL.createObjectURL(blob);
   a.download = `工作坊簽到_${new Date().toISOString().slice(0,10)}.csv`;
   a.click();
-  URL.revokeObjectURL(url);
+  URL.revokeObjectURL(a.href);
   toast('CSV 已匯出！');
 }
 
-// Filter event listeners
-document.querySelectorAll('.filters select, .filters input').forEach(el => {
-  el.addEventListener('change', applyFilters);
-});
+// ========== Event Listeners ==========
+document.querySelectorAll('.filters select, .filters input').forEach(el => el.addEventListener('change', applyFilters));
+
+// ========== Start ==========
+init();
 </script>
 </body>
 </html>
