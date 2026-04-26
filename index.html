@@ -269,8 +269,8 @@ function showLoading(el) {
 
 // ========== API Call ==========
 async function fetchSheet(sheetName, apiKey, sheetId) {
-  const encoded = encodeURIComponent(sheetName);
-  const url = `https://gateway.maton.ai/google-sheets/v4/spreadsheets/${sheetId}/values/${encoded}!A1:Z`;
+  // Use A1:Z without sheet name prefix - Maton gateway handles it
+  const url = `https://gateway.maton.ai/google-sheets/v4/spreadsheets/${sheetId}/values/A1:Z`;
   const resp = await fetch(url, {
     headers: { 'Authorization': `Bearer ${apiKey}` }
   });
