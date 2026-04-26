@@ -117,12 +117,12 @@
  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
  display: flex;
  flex-direction: column;
- min-height: 420px;
+ min-height: 460px;
  }
 
  .chart-container {
  width: 100%;
- height: 380px;
+ height: 420px;
  flex-grow: 1;
  }
 
@@ -561,9 +561,9 @@
  const participantList = [];
 
  filtered.forEach(row => {
- const firstName = (row[2] || '').trim();
- const lastName = (row[3] || '').trim();
- const name = lastName + firstName;
+ const surname = (row[2] || '').trim();    // 夥伴姓 = 郭
+ const givenName = (row[3] || '').trim();   // 名字 = 秋霞
+ const name = surname + givenName;           // 郭秋霞 (姓+名)
  const xiaoC = (row[8] || '').trim();
  const area = (row[4] || '').trim();
  const rank = (row[5] || '').trim();
