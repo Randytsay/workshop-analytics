@@ -392,6 +392,7 @@
  }
 
  function populateCategories(date) {
+ if (!date) return;
  const select = document.getElementById('categorySelect');
  const cats = new Set();
  allRawData.slice(1).forEach(row => {
@@ -436,6 +437,9 @@
  setTimeout(() => {
  populateDates(year);
  showLoader(false);
+ // Auto-select first date and trigger generate
+ const dateSel = document.getElementById('dateSelect');
+ if (dateSel.value) dateSel.dispatchEvent(new Event('change'));
  }, 50);
  });
 
@@ -452,12 +456,18 @@
  setTimeout(() => {
  populateCategories(date);
  showLoader(false);
+ // Auto-select first category and trigger generate
+ const catSel = document.getElementById('categorySelect');
+ if (catSel.value) catSel.dispatchEvent(new Event('change'));
  }, 50);
  });
 
  document.getElementById('categorySelect').addEventListener('change', function () {
  document.getElementById('generateButton').disabled = !this.value;
  clearAllChartsAndTable();
+ if (this.value) {
+ document.getElementById('generateButton').click();
+ }
  });
 
  document.getElementById('generateButton').addEventListener('click', function () {
