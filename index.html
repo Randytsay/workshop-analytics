@@ -252,8 +252,8 @@ let charts = {};
 
 // ========== Init ==========
 window.onload = () => {
-  // Auto-load with preset credentials
-  loadData();
+  // Small delay to ensure DOM is fully ready
+  setTimeout(() => loadData(), 100);
 };
 
 function toast(msg, type='success') {
@@ -336,6 +336,7 @@ function applyFilters() {
 
 // ========== Build UI ==========
 function buildUI() {
+  if (!filteredData || filteredData.length === 0) return;
   buildFilters();
   buildCharts();
   buildTables();
@@ -412,8 +413,9 @@ function updateStats() {
 const COLORS = ['#6366f1','#22c55e','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#ec4899','#14b8a6','#f97316','#84cc16'];
 
 function buildCharts() {
-  // Destroy old charts
-  Object.values(charts).forEach(c => c.destroy());
+  if (!filteredData || filteredData.length === 0) return;
+  // Destroy old charts safely
+  Object.values(charts).forEach(c => { try { c.destroy(); } catch(e) {} });
   charts = {};
   
   buildTrendChart();
@@ -464,6 +466,7 @@ function buildTrendChart() {
 }
 
 function buildTypeChart() {
+  if (!filteredData || filteredData.length === 0) return;
   const counts = {};
   filteredData.forEach(r => { const v = r['請選擇這場工作坊的類別']; if (v) counts[v] = (counts[v]||0)+1; });
   const labels = Object.keys(counts);
@@ -520,6 +523,7 @@ function buildTypeChart() {
 }
 
 function buildRoleChart() {
+  if (!filteredData || filteredData.length === 0) return;
   const counts = {};
   filteredData.forEach(r => { const v = r['參與者身分']; if (v) counts[v] = (counts[v]||0)+1; });
   const labels = Object.keys(counts);
@@ -540,6 +544,7 @@ function buildRoleChart() {
 }
 
 function buildRankChart() {
+  if (!filteredData || filteredData.length === 0) return;
   const counts = {};
   filteredData.forEach(r => { const v = r['目前聘階']; if (v) counts[v] = (counts[v]||0)+1; });
   const sorted = Object.entries(counts).sort((a,b) => b[1]-a[1]);
@@ -565,6 +570,7 @@ function buildRankChart() {
 }
 
 function buildTeamChart() {
+  if (!filteredData || filteredData.length === 0) return;
   const counts = {};
   filteredData.forEach(r => { const v = r['所屬小C']; if (v) counts[v] = (counts[v]||0)+1; });
   const sorted = Object.entries(counts).sort((a,b) => b[1]-a[1]).slice(0, 10);
@@ -590,6 +596,7 @@ function buildTeamChart() {
 }
 
 function buildAreaChart() {
+  if (!filteredData || filteredData.length === 0) return;
   const counts = {};
   filteredData.forEach(r => { const v = r['來自哪個區域']; if (v) counts[v] = (counts[v]||0)+1; });
   const sorted = Object.entries(counts).sort((a,b) => b[1]-a[1]);
