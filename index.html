@@ -1,645 +1,704 @@
 <!DOCTYPE html>
-<html lang="zh-TW">
+<html>
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>工作坊簽到分析儀表板</title>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" defer></script>
-  <style>
-    :root {
-      --primary: #6366f1;
-      --primary-dark: #4f46e5;
-      --success: #22c55e;
-      --warning: #f59e0b;
-      --danger: #ef4444;
-      --bg: #0f172a;
-      --card: #1e293b;
-      --border: #334155;
-      --text: #f1f5f9;
-      --text-dim: #94a3b8;
-    }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+ <meta charset="utf-8">
+ <title>工作坊統計圖表</title>
+ <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+ <style>
+ :root {
+ --primary-accent: #4285f4;
+ --secondary-accent: #34a853;
+ --border-color: #ddd;
+ --panel-bg: #fff;
+ --text-color: #333;
+ --label-color: #666;
+ }
 
-    /* Loading screen */
-    #loading-screen {
-      position: fixed; inset: 0; background: var(--bg);
-      display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 9999;
-    }
-    #loading-screen .spinner { width: 48px; height: 48px; border: 4px solid var(--border); border-top-color: var(--primary); border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 16px; }
-    #loading-screen p { color: var(--text-dim); font-size: 15px; }
-    #loading-screen .error-msg { color: var(--danger); font-size: 14px; margin-top: 12px; text-align: center; max-width: 400px; display: none; }
-    @keyframes spin { to { transform: rotate(360deg); } }
+ body {
+ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+ margin: 15px;
+ background-color: #f0f2f5;
+ color: var(--text-color);
+ font-size: 14px;
+ }
 
-    header { background: var(--card); border-bottom: 1px solid var(--border); padding: 16px 24px; position: sticky; top: 0; z-index: 100; }
-    .header-inner { max-width: 1400px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
-    .header-inner h1 { font-size: 20px; font-weight: 700; color: var(--primary); }
-    .header-controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-    .btn { background: var(--primary); color: white; border: none; padding: 8px 16px; border-radius: 8px; font-size: 13px; cursor: pointer; font-weight: 600; transition: background 0.2s; }
-    .btn:hover { background: var(--primary-dark); }
-    .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text); }
-    .btn-outline:hover { border-color: var(--primary); color: var(--primary); }
+ .main-container {
+ display: flex;
+ flex-direction: column;
+ gap: 15px;
+ max-width: 1300px;
+ margin: 0 auto;
+ }
 
-    main { max-width: 1400px; margin: 0 auto; padding: 24px; display: none; }
-    main.visible { display: block; }
+ .controls-container {
+ padding: 15px;
+ background-color: var(--panel-bg);
+ border-radius: 6px;
+ box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+ margin-bottom: 15px;
+ }
 
-    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 24px; }
-    .stat-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
-    .stat-card .label { font-size: 13px; color: var(--text-dim); margin-bottom: 6px; }
-    .stat-card .value { font-size: 32px; font-weight: 800; color: var(--primary); }
-    .stat-card .sub { font-size: 12px; color: var(--text-dim); margin-top: 4px; }
-    .stat-card.warning .value { color: var(--warning); }
-    .stat-card.success .value { color: var(--success); }
+ .row {
+ display: flex;
+ align-items: center;
+ gap: 10px;
+ margin-bottom: 12px;
+ }
 
-    .filters { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px 20px; margin-bottom: 24px; display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
-    .filters label { font-size: 13px; color: var(--text-dim); display: flex; align-items: center; gap: 6px; }
-    .filters select, .filters input { background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 6px 12px; border-radius: 8px; font-size: 13px; min-width: 140px; }
-    .filters select:focus, .filters input:focus { outline: 2px solid var(--primary); border-color: var(--primary); }
+ label {
+ width: 110px;
+ font-size: 0.9em;
+ color: var(--label-color);
+ flex-shrink: 0;
+ }
 
-    .charts-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 20px; margin-bottom: 24px; }
-    .chart-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
-    .chart-card h3 { font-size: 15px; font-weight: 600; margin-bottom: 16px; display: flex; align-items: center; gap: 6px; }
-    .chart-wrap { position: relative; height: 260px; }
-    .chart-wrap.tall { height: 320px; }
+ select,
+ button {
+ padding: 8px 12px;
+ font-size: 0.9em;
+ border-radius: 4px;
+ border: 1px solid var(--border-color);
+ }
 
-    .tables-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 20px; }
-    .table-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-top: 24px; }
-    .table-card h3 { font-size: 15px; font-weight: 600; margin-bottom: 16px; }
-    table { width: 100%; border-collapse: collapse; font-size: 13px; }
-    th { text-align: left; padding: 10px 12px; background: var(--bg); color: var(--text-dim); font-weight: 600; border-bottom: 1px solid var(--border); white-space: nowrap; }
-    td { padding: 10px 12px; border-bottom: 1px solid var(--border); }
-    tr:hover { background: rgba(99,102,241,0.08); }
-    .table-scroll { max-height: 400px; overflow-y: auto; }
-    .badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 600; }
-    .badge-primary { background: rgba(99,102,241,0.2); color: #818cf8; }
-    .badge-success { background: rgba(34,197,94,0.2); color: #4ade80; }
-    .badge-warning { background: rgba(245,158,11,0.2); color: #fbbf24; }
-    .badge-danger { background: rgba(239,68,68,0.2); color: #f87171; }
+ select {
+ flex-grow: 1;
+ min-width: 150px;
+ }
 
-    .toast { position: fixed; bottom: 24px; right: 24px; background: var(--card); border: 1px solid var(--border); padding: 12px 20px; border-radius: 10px; font-size: 14px; z-index: 1000; transform: translateY(100px); opacity: 0; transition: all 0.3s; box-shadow: 0 10px 40px rgba(0,0,0,0.3); }
-    .toast.show { transform: translateY(0); opacity: 1; }
-    .toast.success { border-color: var(--success); color: var(--success); }
-    .toast.error { border-color: var(--danger); color: var(--danger); }
+ button {
+ cursor: pointer;
+ background-color: var(--primary-accent);
+ color: white;
+ }
 
-    @media (max-width: 768px) {
-      .charts-grid, .tables-grid { grid-template-columns: 1fr; }
-      .stat-card .value { font-size: 24px; }
-    }
-  </style>
+ button:disabled {
+ background-color: #ccc;
+ cursor: not-allowed;
+ }
+
+ button#generateButton {
+ background-color: var(--secondary-accent);
+ }
+
+ .loader {
+ border: 4px solid #f3f3f3;
+ border-top: 4px solid var(--primary-accent);
+ border-radius: 50%;
+ width: 24px;
+ height: 24px;
+ animation: spin 1s linear infinite;
+ display: none;
+ margin-left: 10px;
+ }
+
+ @keyframes spin {
+ 0% { transform: rotate(0deg); }
+ 100% { transform: rotate(360deg); }
+ }
+
+ .content-wrapper {
+ display: flex;
+ flex-direction: column;
+ gap: 20px;
+ }
+
+ .charts-grid {
+ display: grid;
+ grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+ gap: 20px;
+ }
+
+ .chart-wrapper,
+ .participant-table-wrapper {
+ border: 1px solid var(--border-color);
+ padding: 15px;
+ border-radius: 6px;
+ background-color: var(--panel-bg);
+ box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+ display: flex;
+ flex-direction: column;
+ min-height: 420px;
+ }
+
+ .chart-container {
+ width: 100%;
+ height: 380px;
+ flex-grow: 1;
+ }
+
+ .download-button-wrapper {
+ text-align: right;
+ margin-bottom: 8px;
+ }
+ .download-button-wrapper button {
+ padding: 6px 10px;
+ font-size: 0.8em;
+ background-color: #6c757d;
+ }
+ .download-button-wrapper button:hover {
+ background-color: #5a6268;
+ }
+
+ .participant-table-wrapper h3 {
+ margin-top: 0;
+ margin-bottom: 10px;
+ font-size: 1.1em;
+ color: var(--text-color);
+ border-bottom: 1px solid var(--border-color);
+ padding-bottom: 8px;
+ flex-shrink: 0;
+ }
+
+ #participantTableContainer {
+ flex-grow: 1;
+ overflow-y: auto;
+ border: 1px solid var(--border-color);
+ padding: 0;
+ }
+
+ #participantTableContainer table {
+ width: 100%;
+ border-collapse: collapse;
+ font-size: 0.9em;
+ }
+
+ #participantTableContainer th,
+ #participantTableContainer td {
+ border-bottom: 1px solid var(--border-color);
+ border-left: none;
+ border-right: none;
+ border-top: none;
+ padding: 8px 10px;
+ text-align: left;
+ }
+
+ #participantTableContainer th {
+ background-color: #f0f2f5;
+ font-weight: bold;
+ position: sticky;
+ top: 0;
+ }
+ #participantTableContainer tr:nth-child(even) td {
+ background-color: #f9f9f9;
+ }
+
+ #participantTableContainer tr:hover td {
+ background-color: #e9ecef;
+ }
+ </style>
 </head>
 <body>
+ <div class="main-container">
+ <div class="controls-container">
+ <div class="row">
+ <label for="yearSelect">選擇年份:</label>
+ <select id="yearSelect"><option value="">讀取中...</option></select>
+ </div>
+ <div class="row">
+ <label for="dateSelect">工作坊日期:</label>
+ <select id="dateSelect" disabled><option value="">---</option></select>
+ </div>
+ <div class="row">
+ <label for="categorySelect">工作坊類別:</label>
+ <select id="categorySelect" disabled><option value="">---</option></select>
+ </div>
+ <div class="row">
+ <button id="generateButton" disabled>生成統計圖與名單</button>
+ <div id="loader" class="loader"></div>
+ </div>
+ </div>
 
-<!-- Loading screen -->
-<div id="loading-screen">
-  <div class="spinner"></div>
-  <p>正在讀取 Google Sheets 資料...</p>
-  <div class="error-msg" id="loadingError"></div>
-</div>
+ <div class="content-wrapper">
+ <div class="charts-grid">
+ <div class="chart-wrapper">
+ <div class="download-button-wrapper">
+ <button onclick="app.downloadChartInstance('roseChart', '玫瑰圖')">下載</button>
+ </div>
+ <div id="chartContainerRose" class="chart-container"></div>
+ </div>
+ <div class="chart-wrapper">
+ <div class="download-button-wrapper">
+ <button onclick="app.downloadChartInstance('barVChart', '柱狀圖')">下載</button>
+ </div>
+ <div id="chartContainerBarV" class="chart-container"></div>
+ </div>
+ <div class="chart-wrapper">
+ <div class="download-button-wrapper">
+ <button onclick="app.downloadChartInstance('barHChart', '條形圖')">下載</button>
+ </div>
+ <div id="chartContainerBarH" class="chart-container"></div>
+ </div>
+ <div class="participant-table-wrapper">
+ <h3>參與者詳細名單</h3>
+ <div id="participantTableContainer">
+ <p id="noParticipantMessage" style="text-align:center; color:#888; padding: 20px;">請選擇條件並點擊「生成統計圖與名單」。</p>
+ </div>
+ </div>
+ </div>
+ </div>
+ </div>
 
-<header>
-  <div class="header-inner">
-    <h1>📊 工作坊簽到分析儀表板</h1>
-    <div class="header-controls">
-      <button class="btn" onclick="location.reload()">🔄 重新整理</button>
-      <button class="btn btn-outline" onclick="exportCSV()">📥 匯出 CSV</button>
-    </div>
-  </div>
-</header>
+ <script>
+ const app = {};
+ app.echartsInstances = {};
+ app.currentData = { stats: [], participants: [] };
 
-<main id="mainContent">
-  <!-- Stats -->
-  <div class="stats-grid" id="statsGrid">
-    <div class="stat-card">
-      <div class="label">總簽到人次</div>
-      <div class="value" id="statTotal">—</div>
-      <div class="sub" id="statDateRange">—</div>
-    </div>
-    <div class="stat-card">
-      <div class="label">獨立人數</div>
-      <div class="value" id="statUnique">—</div>
-      <div class="sub">不同姓名</div>
-    </div>
-    <div class="stat-card warning">
-      <div class="label">學習夥伴</div>
-      <div class="value" id="statLearner">—</div>
-      <div class="sub">學員身份</div>
-    </div>
-    <div class="stat-card success">
-      <div class="label">主持人/場控</div>
-      <div class="value" id="statHost">—</div>
-      <div class="sub">工作人員</div>
-    </div>
-    <div class="stat-card">
-      <div class="label">經營工作坊</div>
-      <div class="value" id="statBiz">—</div>
-      <div class="sub">報名場次最多</div>
-    </div>
-    <div class="stat-card">
-      <div class="label">活躍小C團隊</div>
-      <div class="value" id="statTeams">—</div>
-      <div class="sub">有簽到記錄</div>
-    </div>
-  </div>
+ const colorGradients = [
+ ['#5470c6', '#2c3e88'],
+ ['#91cc75', '#3f8a2f'],
+ ['#fac858', '#d99c0d'],
+ ['#ee6666', '#b13939'],
+ ['#73c0de', '#3b8dad'],
+ ['#ea7ccc', '#b13e8f'],
+ ['#63D4A3', '#34A87C'],
+ ['#fc8452', '#d95b21'],
+ ['#9a60b4', '#6b3e81'],
+ ];
 
-  <!-- Filters -->
-  <div class="filters">
-    <label>📅 工作坊日期</label>
-    <input type="date" id="filterDateFrom">
-    <span style="color:var(--text-dim)">~</span>
-    <input type="date" id="filterDateTo">
-    <label>🏷️ 類別</label>
-    <select id="filterType"><option value="">全部</option></select>
-    <label>👤 身份</label>
-    <select id="filterRole"><option value="">全部</option></select>
-    <label>🗺️ 區域</label>
-    <select id="filterArea"><option value="">全部</option></select>
-    <label>🔖 聘階</label>
-    <select id="filterRank"><option value="">全部</option></select>
-    <label>👥 小C</label>
-    <select id="filterTeam"><option value="">全部</option></select>
-    <button class="btn btn-outline" onclick="resetFilters()">🔄 清除篩選</button>
-  </div>
+ function getItemStyleForChart(index, chartType = 'bar', orientation = 'vertical') {
+ const gradient = colorGradients[index % colorGradients.length];
+ let itemStyle = {
+ color: {
+ type: 'linear',
+ x: 0, y: 0, x2: 0, y2: 1,
+ colorStops: [{ offset: 0, color: gradient[0] }, { offset: 1, color: gradient[1] }]
+ },
+ borderRadius: 4,
+ shadowBlur: 10,
+ shadowColor: 'rgba(0,0,0,0.1)',
+ shadowOffsetX: 0,
+ shadowOffsetY: 1,
+ borderWidth: chartType === 'rose' ? 0.5 : 0,
+ borderColor: chartType === 'rose' ? 'rgba(0,0,0,0.1)' : undefined
+ };
+ if (chartType === 'bar') {
+ itemStyle.borderRadius = orientation === 'vertical' ? [4,4,0,0] : [0,4,4,0];
+ itemStyle.shadowColor = 'rgba(0,0,0,0.15)';
+ itemStyle.shadowOffsetY = 2;
+ if (orientation === 'horizontal') {
+ itemStyle.color.x2 = 1;
+ itemStyle.color.y2 = 0;
+ }
+ } else if (chartType === 'rose') {
+ itemStyle.borderRadius = 6;
+ }
+ return itemStyle;
+ }
 
-  <!-- Charts Row 1 -->
-  <div class="charts-grid">
-    <div class="chart-card">
-      <h3>📈 每月簽到趨勢</h3>
-      <div class="chart-wrap tall"><canvas id="chartTrend"></canvas></div>
-    </div>
-    <div class="chart-card">
-      <h3>🏷️ 工作坊類別分佈</h3>
-      <div class="chart-wrap"><canvas id="chartType"></canvas></div>
-      <div style="margin-top:12px;height:200px"><canvas id="chartTypeBar"></canvas></div>
-    </div>
-  </div>
+ // ========== Config ==========
+ const API_KEY = 'v2.BYXneOcP6Bv73dvpyiE_tUZQtFxobX4KB3ruQWCMxOfveEkzVnmOwUk5ugf9H2K_QjOQRG4jxEJkONVa6oJ0K38OBygg0LtRx2lw-hF5zIU6WC9Jrz5t3rlx';
+ const SHEET_ID = '1QEytkFQTYVgkwCxgcC4BKrvf9ZkC_GApJd1U6JQAnsI';
+ const SHEET_NAME = '簽到記錄表';
 
-  <!-- Charts Row 2 -->
-  <div class="charts-grid">
-    <div class="chart-card">
-      <h3>👥 參與者身份分佈</h3>
-      <div class="chart-wrap"><canvas id="chartRole"></canvas></div>
-    </div>
-    <div class="chart-card">
-      <h3>🔖 聘階分佈</h3>
-      <div class="chart-wrap"><canvas id="chartRank"></canvas></div>
-    </div>
-  </div>
+ let allRawData = [];
 
-  <!-- Charts Row 3 -->
-  <div class="charts-grid">
-    <div class="chart-card">
-      <h3>👨‍👩‍👧‍👦 小C團隊表現（前10名）</h3>
-      <div class="chart-wrap tall"><canvas id="chartTeam"></canvas></div>
-    </div>
-    <div class="chart-card">
-      <h3>🗺️ 區域分佈</h3>
-      <div class="chart-wrap"><canvas id="chartArea"></canvas></div>
-    </div>
-  </div>
+ // ========== Init ==========
+ document.addEventListener('DOMContentLoaded', function () {
+ app.echartsInstances.roseChart = echarts.init(document.getElementById('chartContainerRose'));
+ app.echartsInstances.barVChart = echarts.init(document.getElementById('chartContainerBarV'));
+ app.echartsInstances.barHChart = echarts.init(document.getElementById('chartContainerBarH'));
 
-  <!-- Tables -->
-  <div class="tables-grid">
-    <div class="table-card" style="margin-top:0">
-      <h3>📅 每日簽到記錄（最近30筆）</h3>
-      <div class="table-scroll">
-        <table id="tableRecent"><thead></thead><tbody></tbody></table>
-      </div>
-    </div>
-    <div class="table-card" style="margin-top:0">
-      <h3>🏆 小C團隊排名</h3>
-      <div class="table-scroll">
-        <table id="tableTeams"><thead></thead><tbody></tbody></table>
-      </div>
-    </div>
-  </div>
+ window.addEventListener('resize', function() {
+ for (const key in app.echartsInstances) {
+ if (app.echartsInstances[key] && app.echartsInstances[key].resize) {
+ app.echartsInstances[key].resize();
+ }
+ }
+ });
 
-  <!-- Top participants -->
-  <div class="table-card">
-    <h3>⭐ 活躍參與者（前20名）</h3>
-    <div class="table-scroll">
-      <table id="tableTop"><thead></thead><tbody></tbody></table>
-    </div>
-  </div>
-</main>
+ clearAllChartsAndTable();
+ showLoader(true);
 
-<div class="toast" id="toast"></div>
+ fetchSheetData().then(raw => {
+ allRawData = raw;
+ showLoader(false);
+ populateYears();
+ }).catch(err => {
+ showLoader(false);
+ alert('讀取資料失敗：' + err.message);
+ });
+ });
 
-<script>
-// ========== Config ==========
-const API_KEY = 'v2.BYXneOcP6Bv73dvpyiE_tUZQtFxobX4KB3ruQWCMxOfveEkzVnmOwUk5ugf9H2K_QjOQRG4jxEJkONVa6oJ0K38OBygg0LtRx2lw-hF5zIU6WC9Jrz5t3rlx';
-const SHEET_ID = '1QEytkFQTYVgkwCxgcC4BKrvf9ZkC_GApJd1U6JQAnsI';
+ // ========== API ==========
+ async function fetchSheetData() {
+ const url = `https://gateway.maton.ai/google-sheets/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(SHEET_NAME)}!A1:Z`;
+ const resp = await fetch(url, {
+ headers: { 'Authorization': `Bearer ${API_KEY}` }
+ });
+ if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+ const data = await resp.json();
+ if (data.error) throw new Error(data.error.message || 'API 錯誤');
+ return data.values || [];
+ }
 
-// ========== State ==========
-let allData = [];
-let filteredData = [];
-const chartInstances = {};
+ // ========== Loader ==========
+ function showLoader(isLoading) {
+ document.getElementById('loader').style.display = isLoading ? 'inline-block' : 'none';
+ }
 
-// ========== Toast ==========
-function toast(msg, type='success') {
-  const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.className = `toast ${type} show`;
-  setTimeout(() => t.classList.remove('show'), 4000);
-}
+ // ========== Populate ==========
+ function populateYears() {
+ const select = document.getElementById('yearSelect');
+ const years = new Set();
+ allRawData.slice(1).forEach(row => {
+ const dateStr = (row[1] || '').trim();
+ const match = dateStr.match(/^(\d{4})\//);
+ if (match) years.add(match[1]);
+ });
 
-function showError(msg) {
-  document.getElementById('loadingError').textContent = msg;
-  document.getElementById('loadingError').style.display = 'block';
-}
+ const sortedYears = Array.from(years).sort((a,b) => b - a);
+ select.innerHTML = '<option value="">請選擇年份</option>';
+ sortedYears.forEach(y => {
+ const opt = document.createElement('option');
+ opt.value = y; opt.textContent = y;
+ select.appendChild(opt);
+ });
 
-// ========== Init ==========
-async function init() {
-  try {
-    document.querySelector('#loading-screen p').textContent = '正在讀取 Google Sheets 資料...';
-    const raw = await fetchSheet();
-    const rows = raw.values;
-    if (!rows || rows.length < 2) {
-      showError('查無資料');
-      return;
-    }
-    const headers = rows[0].map(h => String(h || '').trim());
-    allData = rows.slice(1).map(row => {
-      const obj = {};
-      headers.forEach((h, i) => obj[h] = String(row[i] || '').trim());
-      return obj;
-    }).filter(r => r['時間戳記']);
+ if (sortedYears.length > 0) {
+ select.value = sortedYears[0];
+ select.dispatchEvent(new Event('change'));
+ }
+ }
 
-    filteredData = [...allData];
+ function populateDates(year) {
+ const select = document.getElementById('dateSelect');
+ const dates = new Set();
+ allRawData.slice(1).forEach(row => {
+ const dateStr = (row[1] || '').trim();
+ if (dateStr.startsWith(year + '/') || dateStr.startsWith(year + '-')) {
+ dates.add(dateStr);
+ }
+ });
 
-    // Hide loading, show main
-    document.getElementById('loading-screen').style.display = 'none';
-    document.getElementById('mainContent').classList.add('visible');
+ const sortedDates = Array.from(dates).sort((a,b) => new Date(b) - new Date(a));
+ select.innerHTML = '<option value="">請選擇日期</option>';
+ select.disabled = false;
+ sortedDates.forEach(d => {
+ const opt = document.createElement('option');
+ opt.value = d; opt.textContent = d;
+ select.appendChild(opt);
+ });
 
-    toast(`已載入 ${allData.length} 筆記錄！`);
-    buildUI();
-  } catch (e) {
-    console.error('Load error:', e);
-    showError('載入失敗：' + e.message + '\n\n請確認網路連線，或聯繫管理者。');
-  }
-}
+ if (sortedDates.length > 0) {
+ select.value = sortedDates[0];
+ select.dispatchEvent(new Event('change'));
+ } else {
+ select.innerHTML = '<option value="">該年份無工作坊日期</option>';
+ select.disabled = true;
+ document.getElementById('categorySelect').innerHTML = '<option value="">---</option>';
+ document.getElementById('categorySelect').disabled = true;
+ document.getElementById('generateButton').disabled = true;
+ }
+ }
 
-// ========== API ==========
-async function fetchSheet() {
-  const url = `https://gateway.maton.ai/google-sheets/v4/spreadsheets/${SHEET_ID}/values/A1:Z`;
-  const resp = await fetch(url, {
-    headers: { 'Authorization': `Bearer ${API_KEY}` }
-  });
-  if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
-  const data = await resp.json();
-  if (data.error) throw new Error(data.error.message || 'API 錯誤');
-  return data;
-}
+ function populateCategories(date) {
+ const select = document.getElementById('categorySelect');
+ const cats = new Set();
+ allRawData.slice(1).forEach(row => {
+ if ((row[1] || '').trim() === date) {
+ const cat = (row[6] || '').trim();
+ if (cat) cats.add(cat);
+ }
+ });
 
-// ========== UI Build ==========
-function buildUI() {
-  try {
-    buildFilters();
-    buildCharts();
-    buildTables();
-    updateStats();
-  } catch (e) {
-    console.error('UI build error:', e);
-    toast('部分圖表載入失敗：' + e.message, 'error');
-  }
-}
+ const sortedCats = Array.from(cats);
+ select.innerHTML = '<option value="">請選擇類別</option>';
+ select.disabled = false;
+ sortedCats.forEach(c => {
+ const opt = document.createElement('option');
+ opt.value = c; opt.textContent = c;
+ select.appendChild(opt);
+ });
 
-function buildFilters() {
-  const types = [...new Set(allData.map(r => r['請選擇這場工作坊的類別']).filter(Boolean))].sort();
-  const roles = [...new Set(allData.map(r => r['參與者身分']).filter(Boolean))].sort();
-  const areas = [...new Set(allData.map(r => r['來自哪個區域']).filter(Boolean))].sort();
-  const ranks = [...new Set(allData.map(r => r['目前聘階']).filter(Boolean))].sort();
-  const teams = [...new Set(allData.map(r => r['所屬小C']).filter(Boolean))].sort();
+ if (sortedCats.length > 0) {
+ select.value = sortedCats[0];
+ select.dispatchEvent(new Event('change'));
+ } else {
+ select.innerHTML = '<option value="">該日期無工作坊類別</option>';
+ select.disabled = true;
+ document.getElementById('generateButton').disabled = true;
+ }
+ }
 
-  populateSelect('filterType', types);
-  populateSelect('filterRole', roles);
-  populateSelect('filterArea', areas);
-  populateSelect('filterRank', ranks);
-  populateSelect('filterTeam', teams);
+ // ========== Events ==========
+ document.getElementById('yearSelect').addEventListener('change', function () {
+ const year = this.value;
+ if (!year) {
+ document.getElementById('dateSelect').innerHTML = '<option value="">---</option>';
+ document.getElementById('dateSelect').disabled = true;
+ document.getElementById('categorySelect').innerHTML = '<option value="">---</option>';
+ document.getElementById('categorySelect').disabled = true;
+ document.getElementById('generateButton').disabled = true;
+ clearAllChartsAndTable();
+ return;
+ }
+ showLoader(true);
+ setTimeout(() => {
+ populateDates(year);
+ showLoader(false);
+ }, 50);
+ });
 
-  // Set date range
-  const dates = allData.map(r => r['參與工作坊日期']).filter(d => d && d.match(/^\d{4}\/\d{1,2}\/\d{1,2}/)).sort();
-  if (dates.length) {
-    document.getElementById('filterDateFrom').value = dates[0];
-    document.getElementById('filterDateTo').value = dates[dates.length - 1];
-  }
-}
+ document.getElementById('dateSelect').addEventListener('change', function () {
+ const date = this.value;
+ if (!date) {
+ document.getElementById('categorySelect').innerHTML = '<option value="">---</option>';
+ document.getElementById('categorySelect').disabled = true;
+ document.getElementById('generateButton').disabled = true;
+ clearAllChartsAndTable();
+ return;
+ }
+ showLoader(true);
+ setTimeout(() => {
+ populateCategories(date);
+ showLoader(false);
+ }, 50);
+ });
 
-function populateSelect(id, values) {
-  const sel = document.getElementById(id);
-  sel.innerHTML = '<option value="">全部</option>';
-  values.forEach(v => { if (v) sel.innerHTML += `<option value="${v}">${v}</option>`; });
-}
+ document.getElementById('categorySelect').addEventListener('change', function () {
+ document.getElementById('generateButton').disabled = !this.value;
+ clearAllChartsAndTable();
+ });
 
-function resetFilters() {
-  document.querySelectorAll('.filters select').forEach(s => s.value = '');
-  document.querySelectorAll('.filters input').forEach(i => i.value = '');
-  filteredData = [...allData];
-  buildFilters();
-  buildCharts();
-  buildTables();
-  updateStats();
-  toast('已清除篩選');
-}
+ document.getElementById('generateButton').addEventListener('click', function () {
+ const year = document.getElementById('yearSelect').value;
+ const date = document.getElementById('dateSelect').value;
+ const category = document.getElementById('categorySelect').value;
+ if (!year || !date || !category) {
+ alert('請選擇完整的年份、日期和類別！');
+ return;
+ }
+ showLoader(true);
+ this.disabled = true;
+ clearAllChartsAndTable();
+ setTimeout(() => {
+ processAndRenderData(year, date, category);
+ showLoader(false);
+ this.disabled = false;
+ }, 50);
+ });
 
-function applyFilters() {
-  const type = document.getElementById('filterType').value;
-  const role = document.getElementById('filterRole').value;
-  const area = document.getElementById('filterArea').value;
-  const rank = document.getElementById('filterRank').value;
-  const team = document.getElementById('filterTeam').value;
-  const dateFrom = document.getElementById('filterDateFrom').value;
-  const dateTo = document.getElementById('filterDateTo').value;
+ // ========== Clear ==========
+ function clearAllChartsAndTable() {
+ const placeholderText = '請選擇條件並點擊「生成統計圖與名單」';
+ const placeholderOption = {
+ title: { text: placeholderText, left: 'center', top: 'center', textStyle: { color: '#b0b0b0', fontSize: 14 } }
+ };
+ for (const key in app.echartsInstances) {
+ if (app.echartsInstances[key]) {
+ app.echartsInstances[key].clear();
+ app.echartsInstances[key].setOption(placeholderOption, true);
+ }
+ }
+ document.getElementById('participantTableContainer').innerHTML =
+ `<p style="text-align:center; color:#888; padding: 20px;">${placeholderText.replace('生成統計圖與名單', '查看參與者名單')}</p>`;
+ app.currentData = { stats: [], participants: [] };
+ }
 
-  filteredData = allData.filter(r => {
-    if (type && r['請選擇這場工作坊的類別'] !== type) return false;
-    if (role && r['參與者身分'] !== role) return false;
-    if (area && r['來自哪個區域'] !== area) return false;
-    if (rank && r['目前聘階'] !== rank) return false;
-    if (team && r['所屬小C'] !== team) return false;
-    const d = r['參與工作坊日期'];
-    if (dateFrom && d < dateFrom) return false;
-    if (dateTo && d > dateTo) return false;
-    return true;
-  });
+ // ========== Render Table ==========
+ function renderParticipantTable(participants) {
+ const tableContainer = document.getElementById('participantTableContainer');
+ tableContainer.innerHTML = '';
+ if (!participants || participants.length === 0) {
+ tableContainer.innerHTML = '<p style="text-align:center; color:#888; padding: 20px;">該條件下無參與者詳細資料。</p>';
+ return;
+ }
+ const table = document.createElement('table');
+ const thead = table.createTHead();
+ const tbody = table.createTBody();
+ const headerRow = thead.insertRow();
+ ['名字', '區域', '聘階', '身份'].forEach(text => {
+ const th = document.createElement('th');
+ th.textContent = text;
+ headerRow.appendChild(th);
+ });
 
-  buildCharts();
-  buildTables();
-  updateStats();
-}
+ let currentXiaoCName = null;
+ participants.forEach(p => {
+ if (p.xiaoCName !== currentXiaoCName) {
+ currentXiaoCName = p.xiaoCName;
+ const groupRow = tbody.insertRow();
+ const cell = groupRow.insertCell();
+ cell.colSpan = 4;
+ cell.textContent = currentXiaoCName;
+ cell.style.fontWeight = 'bold';
+ cell.style.paddingTop = '12px';
+ cell.style.paddingBottom = '4px';
+ cell.style.backgroundColor = '#e6f4ea';
+ cell.style.borderTop = '2px solid #ccc';
+ }
 
-// ========== Stats ==========
-function updateStats() {
-  const total = filteredData.length;
-  const unique = new Set(filteredData.map(r => r['夥伴姓'] + r['名字'])).size;
-  const learner = filteredData.filter(r => r['參與者身分'] === '學習夥伴').length;
-  const host = filteredData.filter(r => r['參與者身分'] === '主持人/場控').length;
-  const biz = filteredData.filter(r => r['請選擇這場工作坊的類別'] === '經營工作坊').length;
-  const teams = new Set(filteredData.map(r => r['所屬小C'])).size;
+ const tr = tbody.insertRow();
+ [p.name, p.area, p.rank, p.role].forEach((val, i) => {
+ const td = tr.insertCell();
+ td.textContent = val || '-';
+ });
+ });
 
-  document.getElementById('statTotal').textContent = total;
-  document.getElementById('statUnique').textContent = unique;
-  document.getElementById('statLearner').textContent = learner;
-  document.getElementById('statHost').textContent = host;
-  document.getElementById('statBiz').textContent = biz;
-  document.getElementById('statTeams').textContent = teams;
+ tableContainer.appendChild(table);
+ }
 
-  const dates = filteredData.map(r => r['參與工作坊日期']).filter(Boolean).sort();
-  if (dates.length) {
-    document.getElementById('statDateRange').textContent = `${dates[0]} ~ ${dates[dates.length-1]}`;
-  }
-}
+ // ========== Process & Render ==========
+ function processAndRenderData(year, date, category) {
+ const filtered = allRawData.slice(1).filter(row => {
+ const rowDate = (row[1] || '').trim();
+ const rowCat = (row[6] || '').trim();
+ return rowDate === date && rowCat === category;
+ });
 
-// ========== Charts ==========
-const COLORS = ['#6366f1','#22c55e','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#ec4899','#14b8a6','#f97316','#84cc16'];
-// Check Chart.js loaded
-if (typeof Chart === 'undefined') {
-  document.querySelector('#loading-screen p').textContent = 'Chart.js 載入失敗，請檢查網路連線';
-  document.getElementById('loadingError').style.display = 'block';
-  throw new Error('Chart.js not loaded');
-}
+ // Build stats by 小C
+ const statsMap = {};
+ const participantList = [];
 
-const CHART_OPTS = {
-  responsive: true,
-  maintainAspectRatio: false,
-  plugins: { legend: { labels: { color: '#94a3b8', font: { size: 12 } } } },
-  scales: {
-    x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#94a3b8' } },
-    y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#94a3b8' } }
-  }
-};
+ filtered.forEach(row => {
+ const firstName = (row[2] || '').trim();
+ const lastName = (row[3] || '').trim();
+ const name = lastName + firstName;
+ const xiaoC = (row[8] || '').trim();
+ const area = (row[4] || '').trim();
+ const rank = (row[5] || '').trim();
+ const role = (row[7] || '').trim();
 
-function safeChart(id, config) {
-  const canvas = document.getElementById(id);
-  if (!canvas) { console.warn('Canvas not found:', id); return; }
-  const existing = chartInstances[id];
-  if (existing) { try { existing.destroy(); } catch(e) { chartInstances[id] = null; } }
-  try {
-    const ctx = canvas.getContext('2d');
-    if (!ctx) { console.warn('Cannot get context for:', id); return; }
-    chartInstances[id] = new Chart(ctx, config);
-  } catch(e) {
-    console.error('Chart creation error for', id, e);
-    chartInstances[id] = null;
-  }
-}
+ if (xiaoC) {
+ statsMap[xiaoC] = (statsMap[xiaoC] || 0) + 1;
+ }
+ participantList.push({ name, xiaoCName: xiaoC, area, rank, role });
+ });
 
-function buildCharts() {
-  if (!filteredData || !filteredData.length) { console.warn('No data for charts'); return; }
-  if (typeof Chart === 'undefined') { console.warn('Chart.js not loaded'); return; }
-  try {
-    buildTrendChart();
-    buildTypeChart();
-    buildRoleChart();
-    buildRankChart();
-    buildTeamChart();
-    buildAreaChart();
-  } catch (e) {
-    console.error('Chart build error:', e);
-    toast('圖表載入失敗: ' + e.message, 'error');
-  }
-}
+ const statsData = Object.entries(statsMap).map(([name, value]) => ({ name, value }));
 
-function buildTrendChart() {
-  const months = {};
-  filteredData.forEach(r => {
-    const d = r['參與工作坊日期'];
-    if (!d) return;
-    const m = d.substring(0, 7);
-    months[m] = (months[m] || 0) + 1;
-  });
-  const sorted = Object.keys(months).sort();
-  safeChart('chartTrend', {
-    type: 'line',
-    data: {
-      labels: sorted,
-      datasets: [{
-        label: '簽到人次',
-        data: sorted.map(k => months[k]),
-        borderColor: '#6366f1',
-        backgroundColor: 'rgba(99,102,241,0.1)',
-        fill: true, tension: 0.4, pointRadius: 4, pointHoverRadius: 6
-      }]
-    },
-    options: { ...CHART_OPTS, plugins: { legend: { display: false } } }
-  });
-}
+ app.currentData = { stats: statsData, participants: participantList };
+ renderCharts(statsData, date, category);
+ renderParticipantTable(participantList);
+ }
 
-function buildTypeChart() {
-  const counts = {};
-  filteredData.forEach(r => { const v = r['請選擇這場工作坊的類別']; if (v) counts[v] = (counts[v]||0)+1; });
-  const labels = Object.keys(counts);
-  const data = Object.values(counts);
-  safeChart('chartType', {
-    type: 'doughnut',
-    data: { labels, datasets: [{ data, backgroundColor: COLORS.slice(0, labels.length) }] },
-    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { color: '#94a3b8' } } } }
-  });
+ // ========== Charts ==========
+ function renderCharts(statsData, date, category) {
+ const noDataOption = {
+ title: { text: '無符合條件的統計數據', left: 'center', top: 'center', textStyle: { color: '#888', fontSize: 16 } }
+ };
 
-  // Bar by month
-  const types = [...new Set(allData.map(r => r['請選擇這場工作坊的類別']).filter(Boolean))].sort();
-  const monthSet = [...new Set(filteredData.map(r => r['參與工作坊日期'].substring(0,7)).filter(Boolean))].sort();
-  const typeByMonth = {};
-  types.forEach(t => { typeByMonth[t] = {}; monthSet.forEach(m => { typeByMonth[t][m] = 0; }); });
-  filteredData.forEach(r => { const t = r['請選擇這場工作坊的類別']; const m = r['參與工作坊日期'].substring(0,7); if (t && m) typeByMonth[t][m]++; });
-  safeChart('chartTypeBar', {
-    type: 'bar',
-    data: { labels: monthSet, datasets: types.map((t, i) => ({ label: t, data: monthSet.map(m => typeByMonth[t][m]||0), backgroundColor: COLORS[i % COLORS.length] })) },
-    options: { ...CHART_OPTS, plugins: { legend: { display: false } } }
-  });
-}
+ if (!statsData || statsData.length === 0) {
+ app.echartsInstances.roseChart.setOption(noDataOption, true);
+ app.echartsInstances.barVChart.setOption(noDataOption, true);
+ app.echartsInstances.barHChart.setOption(noDataOption, true);
+ return;
+ }
 
-function buildRoleChart() {
-  const counts = {};
-  filteredData.forEach(r => { const v = r['參與者身分']; if (v) counts[v] = (counts[v]||0)+1; });
-  safeChart('chartRole', {
-    type: 'pie',
-    data: { labels: Object.keys(counts), datasets: [{ data: Object.values(counts), backgroundColor: ['#22c55e','#6366f1','#f59e0b'] }] },
-    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#94a3b8' } } } }
-  });
-}
+ let total = 0;
+ statsData.forEach(i => { total += i.value; });
+ const commonSubtext = `${date} - ${category}`;
+ const titleSuffixWithTotal = `（共 ${total} 人）`;
 
-function buildRankChart() {
-  const counts = {};
-  filteredData.forEach(r => { const v = r['目前聘階']; if (v) counts[v] = (counts[v]||0)+1; });
-  const sorted = Object.entries(counts).sort((a,b) => b[1]-a[1]);
-  safeChart('chartRank', {
-    type: 'bar',
-    data: { labels: sorted.map(s => s[0]), datasets: [{ label: '人數', data: sorted.map(s => s[1]), backgroundColor: '#8b5cf6' }] },
-    options: { ...CHART_OPTS, indexAxis: 'y', plugins: { legend: { display: false } } }
-  });
-}
+ const baseTitleStyle = {
+ left: 'center',
+ textStyle: { fontSize: 16, fontWeight: '600' },
+ subtextStyle: { fontSize: 12, color: '#555', lineHeight: 18 }
+ };
 
-function buildTeamChart() {
-  const counts = {};
-  filteredData.forEach(r => { const v = r['所屬小C']; if (v) counts[v] = (counts[v]||0)+1; });
-  const sorted = Object.entries(counts).sort((a,b) => b[1]-a[1]).slice(0, 10);
-  safeChart('chartTeam', {
-    type: 'bar',
-    data: { labels: sorted.map(s => s[0]), datasets: [{ label: '簽到次數', data: sorted.map(s => s[1]), backgroundColor: '#06b6d4' }] },
-    options: { ...CHART_OPTS, indexAxis: 'y', plugins: { legend: { display: false } } }
-  });
-}
+ // Rose Chart
+ const roseOption = {
+ title: { ...baseTitleStyle, text: `各小C參與人數 ${titleSuffixWithTotal}`, subtext: commonSubtext },
+ tooltip: { trigger: 'item', formatter: params => `${params.name}: ${params.value}人 (${params.percent.toFixed(1)}%)` },
+ series: [{
+ name: '參與人數',
+ type: 'pie',
+ radius: '65%',
+ center: ['50%', '58%'],
+ roseType: 'area',
+ data: statsData.map((item, index) => ({
+ name: item.name,
+ value: item.value,
+ itemStyle: getItemStyleForChart(index, 'rose')
+ })),
+ label: {
+ show: true,
+ formatter: function(params) {
+ return `${params.name}\n${params.value}人\n(${params.percent.toFixed(1)}%)`;
+ },
+ minMargin: 5,
+ edgeDistance: '5%',
+ lineHeight: 15,
+ fontSize: 10
+ },
+ labelLine: { smooth: 0.2, length: 8, length2: 12 },
+ emphasis: { itemStyle: { shadowBlur: 15, shadowColor: 'rgba(0,0,0,0.3)' } }
+ }]
+ };
+ app.echartsInstances.roseChart.setOption(roseOption, true);
 
-function buildAreaChart() {
-  const counts = {};
-  filteredData.forEach(r => { const v = r['來自哪個區域']; if (v) counts[v] = (counts[v]||0)+1; });
-  const sorted = Object.entries(counts).sort((a,b) => b[1]-a[1]);
-  safeChart('chartArea', {
-    type: 'bar',
-    data: { labels: sorted.map(s => s[0]), datasets: [{ label: '人數', data: sorted.map(s => s[1]), backgroundColor: '#f59e0b' }] },
-    options: { ...CHART_OPTS, plugins: { legend: { display: false } } }
-  });
-}
+ // Bar V
+ const barVOption = {
+ title: { ...baseTitleStyle, text: `各小C參與人數 ${titleSuffixWithTotal}`, subtext: commonSubtext },
+ tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+ grid: { left: '3%', right: '4%', bottom: '12%', top: '30%', containLabel: true },
+ xAxis: {
+ type: 'category',
+ data: statsData.map(i => i.name),
+ axisLabel: { interval: 0, rotate: statsData.length > 5 ? 30 : 0, fontSize: 11, margin: 10 }
+ },
+ yAxis: { type: 'value', name: '人數', nameTextStyle: { fontSize: 11, padding: [0,0,0,30] } },
+ series: [{
+ name: '參與人數',
+ type: 'bar',
+ barWidth: '55%',
+ data: statsData.map((item, index) => ({
+ value: item.value,
+ itemStyle: getItemStyleForChart(index, 'bar', 'vertical')
+ })),
+ label: { show: true, position: 'top', formatter: function(p) { return p.value + '人'; }, fontSize: 10, color: '#444' }
+ }]
+ };
+ app.echartsInstances.barVChart.setOption(barVOption, true);
 
-// ========== Tables ==========
-function buildTables() {
-  try {
-    buildRecentTable();
-    buildTeamTable();
-    buildTopParticipants();
-  } catch (e) {
-    console.error('Table build error:', e);
-  }
-}
+ // Bar H
+ const barHOption = {
+ title: { ...baseTitleStyle, text: `各小C參與人數 ${titleSuffixWithTotal}`, subtext: commonSubtext },
+ tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+ grid: { left: '12%', right: '15%', bottom: '3%', top: '30%', containLabel: true },
+ xAxis: { type: 'value', name: '人數', nameTextStyle: { fontSize: 11 } },
+ yAxis: {
+ type: 'category',
+ data: statsData.map(i => i.name),
+ axisLabel: { interval: 0, fontSize: 11, margin: 10 }
+ },
+ series: [{
+ name: '參與人數',
+ type: 'bar',
+ barWidth: '55%',
+ data: statsData.map((item, index) => ({
+ value: item.value,
+ itemStyle: getItemStyleForChart(index, 'bar', 'horizontal')
+ })),
+ label: { show: true, position: 'right', formatter: function(p) { return p.value + '人'; }, fontSize: 10, color: '#444' }
+ }]
+ };
+ app.echartsInstances.barHChart.setOption(barHOption, true);
+ }
 
-function buildRecentTable() {
-  const headers = ['時間戳記','工作坊日期','姓名','區域','聘階','類別','身份','所屬小C'];
-  const thead = document.querySelector('#tableRecent thead');
-  const tbody = document.querySelector('#tableRecent tbody');
-  thead.innerHTML = `<tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr>`;
-  const recent = filteredData.slice(-30).reverse();
-  tbody.innerHTML = recent.map(r => {
-    const name = `${r['夥伴姓']||''}${r['名字']||''}`;
-    const type = r['請選擇這場工作坊的類別']||'';
-    const role = r['參與者身分']||'';
-    return `<tr>
-      <td>${r['時間戳記']||''}</td><td>${r['參與工作坊日期']||''}</td><td>${name}</td>
-      <td>${r['來自哪個區域']||''}</td><td>${r['目前聘階']||''}</td>
-      <td><span class="badge badge-primary">${type}</span></td>
-      <td><span class="badge ${role==='學習夥伴'?'badge-success':'badge-warning'}">${role}</span></td>
-      <td>${r['所屬小C']||''}</td>
-    </tr>`;
-  }).join('');
-}
-
-function buildTeamTable() {
-  const counts = {};
-  const learnerCounts = {};
-  filteredData.forEach(r => {
-    const t = r['所屬小C']; if (!t) return;
-    counts[t] = (counts[t]||0) + 1;
-    if (r['參與者身分'] === '學習夥伴') learnerCounts[t] = (learnerCounts[t]||0) + 1;
-  });
-  const sorted = Object.entries(counts).sort((a,b) => b[1]-a[1]);
-  const thead = document.querySelector('#tableTeams thead');
-  const tbody = document.querySelector('#tableTeams tbody');
-  thead.innerHTML = `<tr><th>#</th><th>小C名稱</th><th>總簽到</th><th>學習夥伴</th><th>主持人</th></tr>`;
-  tbody.innerHTML = sorted.map(([team, total], i) => {
-    const learner = learnerCounts[team]||0;
-    return `<tr>
-      <td><span class="badge ${i<3?'badge-warning':'badge-primary'}">#${i+1}</span></td>
-      <td style="font-weight:600">${team}</td>
-      <td style="font-weight:700;color:var(--primary)">${total}</td>
-      <td style="color:var(--success)">${learner}</td>
-      <td style="color:var(--warning)">${total-learner}</td>
-    </tr>`;
-  }).join('');
-}
-
-function buildTopParticipants() {
-  const counts = {};
-  filteredData.forEach(r => {
-    const name = `${r['夥伴姓']||''}${r['名字']||''}`;
-    if (!name) return;
-    if (!counts[name]) counts[name] = { name, total:0, team: r['所屬小C'], rank: r['目前聘階'], type:{} };
-    counts[name].total++;
-    const t = r['請選擇這場工作坊的類別'];
-    counts[name].type[t] = (counts[name].type[t]||0) + 1;
-  });
-  const sorted = Object.entries(counts).sort((a,b) => b[1].total-a[1].total).slice(0, 20);
-  const thead = document.querySelector('#tableTop thead');
-  const tbody = document.querySelector('#tableTop tbody');
-  thead.innerHTML = `<tr><th>#</th><th>姓名</th><th>總出席</th><th>主要身份</th><th>小C</th><th>經營/招募/領導</th></tr>`;
-  tbody.innerHTML = sorted.map(([name, info], i) => {
-    const biz = info.type['經營工作坊']||0;
-    const rec = info.type['招募工作坊']||0;
-    const lead = info.type['領導工作坊']||0;
-    return `<tr>
-      <td><span class="badge ${i<3?'badge-warning':'badge-primary'}">${i+1}</span></td>
-      <td style="font-weight:600">${name}</td>
-      <td style="font-weight:700;color:var(--primary)">${info.total}</td>
-      <td><span class="badge badge-success">${info.rank||'-'}</span></td>
-      <td>${info.team||'-'}</td>
-      <td style="font-size:12px">經營:${biz} 招募:${rec} 領導:${lead}</td>
-    </tr>`;
-  }).join('');
-}
-
-// ========== CSV Export ==========
-function exportCSV() {
-  if (!filteredData.length) { toast('無資料可匯出', 'error'); return; }
-  const headers = ['時間戳記','參與工作坊日期','夥伴姓','名字','來自哪個區域','目前聘階','請選擇這場工作坊的類別','參與者身分','所屬小C'];
-  const rows = filteredData.map(r => headers.map(h => `"${(r[h]||'').replace(/"/g,'""')}"`).join(','));
-  const csv = [headers.join(','), ...rows].join('\n');
-  const blob = new Blob(['\ufeff'+csv], { type: 'text/csv;charset=utf-8' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `工作坊簽到_${new Date().toISOString().slice(0,10)}.csv`;
-  a.click();
-  URL.revokeObjectURL(a.href);
-  toast('CSV 已匯出！');
-}
-
-// ========== Event Listeners ==========
-document.querySelectorAll('.filters select, .filters input').forEach(el => el.addEventListener('change', applyFilters));
-
-// ========== Start ==========
-// Use DOMContentLoaded to ensure all external scripts are loaded
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', init);
-} else {
-  init();
-}
-</script>
+ // ========== Download ==========
+ app.downloadChartInstance = function(instanceKey, chartNamePrefix) {
+ if (app.echartsInstances[instanceKey] && app.currentData.stats && app.currentData.stats.length > 0) {
+ const chartInstance = app.echartsInstances[instanceKey];
+ const date = document.getElementById('dateSelect').value || "未選日期";
+ const category = document.getElementById('categorySelect').value || "未選類別";
+ const safeDate = date.replace(/\//g, '-');
+ const fileName = `${safeDate}-${category}.png`;
+ const url = chartInstance.getDataURL({
+ type: 'png',
+ pixelRatio: 2,
+ backgroundColor: '#fff'
+ });
+ const a = document.createElement('a');
+ a.href = url;
+ a.download = fileName;
+ document.body.appendChild(a);
+ a.click();
+ document.body.removeChild(a);
+ } else {
+ alert('圖表中無數據可供下載。');
+ }
+ };
+ </script>
 </body>
 </html>
