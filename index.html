@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>工作坊簽到分析儀表板</title>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" defer></script>
   <style>
     :root {
       --primary: #6366f1;
@@ -391,6 +391,13 @@ function updateStats() {
 
 // ========== Charts ==========
 const COLORS = ['#6366f1','#22c55e','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#ec4899','#14b8a6','#f97316','#84cc16'];
+// Check Chart.js loaded
+if (typeof Chart === 'undefined') {
+  document.querySelector('#loading-screen p').textContent = 'Chart.js 載入失敗，請檢查網路連線';
+  document.getElementById('loadingError').style.display = 'block';
+  throw new Error('Chart.js not loaded');
+}
+
 const CHART_OPTS = {
   responsive: true,
   maintainAspectRatio: false,
@@ -403,14 +410,22 @@ const CHART_OPTS = {
 
 function safeChart(id, config) {
   const canvas = document.getElementById(id);
-  if (!canvas) return;
-  if (chartInstances[id]) { try { chartInstances[id].destroy(); } catch(e) {} }
-  const ctx = canvas.getContext('2d');
-  chartInstances[id] = new Chart(ctx, config);
+  if (!canvas) { console.warn('Canvas not found:', id); return; }
+  const existing = chartInstances[id];
+  if (existing) { try { existing.destroy(); } catch(e) { chartInstances[id] = null; } }
+  try {
+    const ctx = canvas.getContext('2d');
+    if (!ctx) { console.warn('Cannot get context for:', id); return; }
+    chartInstances[id] = new Chart(ctx, config);
+  } catch(e) {
+    console.error('Chart creation error for', id, e);
+    chartInstances[id] = null;
+  }
 }
 
 function buildCharts() {
-  if (!filteredData.length) return;
+  if (!filteredData || !filteredData.length) { console.warn('No data for charts'); return; }
+  if (typeof Chart === 'undefined') { console.warn('Chart.js not loaded'); return; }
   try {
     buildTrendChart();
     buildTypeChart();
@@ -619,7 +634,12 @@ function exportCSV() {
 document.querySelectorAll('.filters select, .filters input').forEach(el => el.addEventListener('change', applyFilters));
 
 // ========== Start ==========
-init();
+// Use DOMContentLoaded to ensure all external scripts are loaded
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', init);
+} else {
+  init();
+}
 </script>
 </body>
 </html>
